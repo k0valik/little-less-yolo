@@ -26,7 +26,9 @@ EOF
 ARG MISE_DATA_DIR=/usr/local/share/mise
 
 # Install uv via mise and expose uv and uvx on PATH.
-RUN <<'EOF'
+# GITHUB_TOKEN is forwarded from CI to avoid GitHub API rate limiting.
+ARG GITHUB_TOKEN
+RUN GITHUB_TOKEN=${GITHUB_TOKEN} <<'EOF'
 set -e
 mise install uv@0.11.13
 ln -s "$(mise exec uv@0.11.13 -- which uv)" /usr/local/bin/uv
@@ -44,7 +46,8 @@ RUN uv python install 3.14.4 \
 # AGENTS.md, and the launcher). The fork lives at vendor/little-coder/ inside
 # this repo — just git clone/pull your fork there and rebuild.
 COPY ./vendor/little-coder/ /little-coder-source/
-RUN cd /little-coder-source && npm install -g .
+# hadolint ignore=DL3016
+RUN npm install -g /little-coder-source
 
 # Install Playwright + Chromium for the browser/ extension.
 # little-coder's browser tools gracefully degrade if Playwright is absent,
@@ -52,7 +55,7 @@ RUN cd /little-coder-source && npm install -g .
 # so the binaries land in /pi-agent/npm-global/bin (set by .npmrc prefix).
 # Note: --with-deps may fail on Chainguard/Wolfi (not a recognized distro).
 # If it does, the browser tools still register but return a clear error.
-RUN npm install -g playwright \
+RUN npm install -g playwright@1.60.0 \
     && npx playwright install --with-deps chromium || \
        npx playwright install chromium || \
        echo "warning: Chromium install skipped — browser tools will degrade gracefully"
