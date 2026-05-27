@@ -26,14 +26,13 @@ EOF
 ARG MISE_DATA_DIR=/usr/local/share/mise
 
 # Install uv via mise and expose uv and uvx on PATH.
-# GITHUB_TOKEN is forwarded from CI to avoid GitHub API rate limiting.
-ARG GITHUB_TOKEN
-RUN GITHUB_TOKEN=${GITHUB_TOKEN} <<'EOF'
-set -e
-mise install uv@0.11.13
-ln -s "$(mise exec uv@0.11.13 -- which uv)" /usr/local/bin/uv
-ln -s "$(mise exec uv@0.11.13 -- which uvx)" /usr/local/bin/uvx
-EOF
+# GITHUB_TOKEN is forwarded from CI via BuildKit secret so mise
+# doesn't hit GitHub API rate limits during the install step.
+RUN --mount=type=secret,id=github_token \
+    export GITHUB_TOKEN=$(cat /run/secrets/github_token 2>/dev/null || echo "") \
+    && mise install uv@0.11.13 \
+    && ln -s "$(mise exec uv@0.11.13 -- which uv)" /usr/local/bin/uv \
+    && ln -s "$(mise exec uv@0.11.13 -- which uvx)" /usr/local/bin/uvx
 
 ENV UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python
 
