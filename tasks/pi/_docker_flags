@@ -19,9 +19,48 @@ fi
 
 "${DOCKER_CMD}" image inspect "${PI_IMAGE}" > /dev/null 2>&1 || mise run pi:build
 
-# Pre-create so Docker doesn't auto-create it as root (breaking writes by the
-# container's non-root UID).
-mkdir -p "${HOME}/.pi/agent"
+# Auto-source .env from the repo root (all pi-less-yolo + little-coder vars).
+# Create .env from .env.example in the repo root and uncomment what you need.
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+if [ -f "${REPO_ROOT}/.env" ]; then
+  set -a
+  source "${REPO_ROOT}/.env"
+  set +a
+fi
+
+# LC_AGENT_DIR: the persistent little-coder config directory on the host.
+# On first run it is seeded with ALL bundled content (extensions, settings,
+# skills, models.json, AGENTS.md) so you can edit ANYTHING from the host.
+# On subsequent runs the bind mount overwrites the container copy, so the
+# user's edits persist.
+LC_AGENT_DIR="${HOME}/.pi/agent-little-coder"
+mkdir -p "${LC_AGENT_DIR}"
+
+# Seed from bundled content only if the directory is empty (first run).
+# The fork lives at vendor/little-coder/ inside this repo.
+if [ -z "$(ls -A "${LC_AGENT_DIR}" 2>/dev/null)" ]; then
+  BUNDLED_LC_DIR="$(cd "$(dirname "$0")/../../vendor/little-coder" && pwd)"
+  BUNDLED_PI_DIR="${BUNDLED_LC_DIR}/.pi"
+  if [ -d "${BUNDLED_PI_DIR}" ]; then
+    # 1. .pi/ (extensions + settings.json)
+    cp -a "${BUNDLED_PI_DIR}/." "${LC_AGENT_DIR}/"
+    # 2. models.json (package root, not in .pi/)
+    if [ -f "${BUNDLED_LC_DIR}/models.json" ]; then
+      cp "${BUNDLED_LC_DIR}/models.json" "${LC_AGENT_DIR}/"
+    fi
+    # 3. skills/ (loaded at runtime by skill-inject/knowledge-inject)
+    if [ -d "${BUNDLED_LC_DIR}/skills" ]; then
+      cp -a "${BUNDLED_LC_DIR}/skills/." "${LC_AGENT_DIR}/skills/"
+    fi
+    # 4. AGENTS.md (system prompt, checked by launcher before pkgRoot version)
+    if [ -f "${BUNDLED_LC_DIR}/AGENTS.md" ]; then
+      cp "${BUNDLED_LC_DIR}/AGENTS.md" "${LC_AGENT_DIR}/"
+    fi
+    echo "[pi] seeded ${LC_AGENT_DIR} from bundled content (extensions, skills, models, AGENTS.md)"
+  else
+    echo "[pi] warning: vendor/little-coder/ not found — ${LC_AGENT_DIR} is empty" >&2
+  fi
+fi
 
 # Permissions:
 #   --user $(id -u):$(id -g)   files created in /workspace are owned by the
@@ -31,11 +70,10 @@ mkdir -p "${HOME}/.pi/agent"
 #
 # Mounts:
 #   $(pwd):$(pwd)              current directory, mounted at its real host path.
-#   ~/.pi/agent:/pi-agent      pi config, credentials, sessions, and managed
-#                               binaries from the host. PI_CODING_AGENT_DIR
-#                               tells pi to use this path instead of deriving
-#                               it from $HOME, sidestepping any HOME-resolution
-#                               issues inside the container.
+#   ~/.pi/agent-little-coder:/pi-agent   little-coder's own config dir
+#                               (settings, sessions, models, extensions).
+#                               The host's global ~/.pi/agent is never
+#                               mounted, never touched, never mixed.
 DOCKER_FLAGS=(
   "--rm"
   "--user" "$(id -u):$(id -g)"
@@ -43,7 +81,7 @@ DOCKER_FLAGS=(
   "--security-opt=no-new-privileges"
   "--ipc=none"
   "--volume" "$(pwd):$(pwd)${_PI_WORKDIR_RO:+:ro}"  # :ro set by pi:readonly
-  "--volume" "${HOME}/.pi/agent:/pi-agent"
+  "--volume" "${LC_AGENT_DIR}:/pi-agent"
   "--workdir" "$(pwd)"
   "--env" "PI_CODING_AGENT_DIR=/pi-agent"
   "--env" "TERM=${TERM:-xterm-256color}"
@@ -57,13 +95,14 @@ if [[ "${DOCKER_CMD}" == "podman" ]]; then
 fi
 
 # Forward pi-related env vars and API keys if set on the host.
-# Auth file (~/.pi/agent/auth.json) takes priority over these if present.
+# Auth file (~/.pi/agent-little-coder/auth.json) takes priority over these if present.
 PI_ENV_VARS=(
   PI_SKIP_VERSION_CHECK
   PI_CACHE_RETENTION
   PI_PACKAGE_DIR
   VISUAL
   EDITOR
+  # Cloud provider API keys
   ANTHROPIC_API_KEY
   AZURE_OPENAI_API_KEY
   OPENAI_API_KEY
@@ -79,6 +118,18 @@ PI_ENV_VARS=(
   KIMI_API_KEY
   MINIMAX_API_KEY
   MINIMAX_CN_API_KEY
+  # Local provider API keys (dummy value like "noop" required even for local servers)
+  LLAMACPP_API_KEY
+  OLLAMA_API_KEY
+  LMSTUDIO_API_KEY
+  # Local provider URL overrides
+  LLAMACPP_BASE_URL
+  OLLAMA_BASE_URL
+  LMSTUDIO_BASE_URL
+  # little-coder bash gate
+  LITTLE_CODER_PERMISSION_MODE
+  LITTLE_CODER_BASH_ALLOW
+  LITTLE_CODER_MODELS_FILE
 )
 for var in "${PI_ENV_VARS[@]}"; do
   [ -n "${!var:-}" ] && DOCKER_FLAGS+=("--env" "$var=${!var}")

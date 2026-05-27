@@ -39,8 +39,32 @@ ENV UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python
 RUN uv python install 3.14.4 \
     && ln -s "$(uv python find 3.14.4)" /usr/local/bin/python3
 
-# Install pi globally
-RUN npm install -g "@earendil-works/pi-coding-agent@0.74.0"
+# Install little-coder globally from the local fork (bundles its own
+# pi-coding-agent as a dependency, plus all extensions, skills, models.json,
+# AGENTS.md, and the launcher). The fork lives at vendor/little-coder/ inside
+# this repo — just git clone/pull your fork there and rebuild.
+COPY ./vendor/little-coder/ /little-coder-source/
+RUN cd /little-coder-source && npm install -g .
+
+# Install Playwright + Chromium for the browser/ extension.
+# little-coder's browser tools gracefully degrade if Playwright is absent,
+# but for full functionality we install it. Using the system npm (not npx)
+# so the binaries land in /pi-agent/npm-global/bin (set by .npmrc prefix).
+# Note: --with-deps may fail on Chainguard/Wolfi (not a recognized distro).
+# If it does, the browser tools still register but return a clear error.
+RUN npm install -g playwright \
+    && npx playwright install --with-deps chromium || \
+       npx playwright install chromium || \
+       echo "warning: Chromium install skipped — browser tools will degrade gracefully"
+
+# /pi-agent: the PI_CODING_AGENT_DIR. On first run the entrypoint seeds it
+# from the bundled .pi/ so settings, extensions, and models.json are present.
+# The host mount (see _docker_flags) overwrites this, so on subsequent runs
+# the user's persistent config takes full control.
+ENV PI_CODING_AGENT_DIR=/pi-agent
+RUN mkdir -p /pi-agent
+COPY ./vendor/little-coder/.pi /pi-agent/
+COPY ./vendor/little-coder/models.json /pi-agent/
 
 # Prepend extension binaries (host-mounted via /pi-agent). Security: binaries
 # here can shadow any command; no privilege escalation (--cap-drop=ALL,
@@ -78,10 +102,10 @@ if ! grep -q "^[^:]*:[^:]*:$(id -u):" /etc/passwd; then
         "$(id -u)" "$(id -g)" "${HOME}" >> /etc/passwd
 fi
 
-# Pass through to a shell when invoked via `pi:shell`; otherwise run pi.
+# Pass through to a shell when invoked via `pi:shell`; otherwise run little-coder.
 case "${1:-}" in
     bash|sh) exec "$@" ;;
-    *) exec pi "$@" ;;
+    *) exec little-coder "$@" ;;
 esac
 ENTRYPOINT
 chmod +x /usr/local/bin/entrypoint.sh

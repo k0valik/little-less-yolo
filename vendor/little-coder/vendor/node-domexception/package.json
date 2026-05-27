@@ -1,0 +1,10 @@
+{
+  "name": "node-domexception",
+  "version": "1.0.1",
+  "description": "Bundled with little-coder. Returns Node's native globalThis.DOMException (built-in since Node 18). Replaces the deprecated upstream node-domexception@1.0.0 via npm overrides so `npm install -g little-coder` no longer prints its deprecation warning. We pin engines.node to >= 18 because that's where native DOMException landed; the launcher's own preflight enforces >= 22.19, so this is satisfied transitively.",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

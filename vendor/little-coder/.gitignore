@@ -1,0 +1,40 @@
+# Node / TypeScript
+node_modules/
+.DS_Store
+
+# Pi session + auth state (local to each user)
+.pi/sessions/
+.pi/auth.json
+
+# Benchmark run artifacts
+benchmarks/tb_runs/
+benchmarks/harbor_runs/
+benchmarks/results_*.json
+benchmarks/results_*.json.tmp
+benchmarks/full_polyglot_logs/
+benchmarks/full_polyglot_logs*/
+benchmarks/gaia_logs/
+benchmarks/gaia_runs/
+benchmarks/archived_contaminated_runs/
+benchmarks/priming_test_logs*/
+benchmarks/repro_logs/
+benchmarks/results.json.bak
+
+# Python bytecode (retained for any user-side scripts)
+__pycache__/
+*.pyc
+
+# Claude Code local state
+.claude/
+
+# Visual-asset generation workspace
+.vhs-work/
+
+# Scratch dev dir (reference/) — NOT docs/reference/, which ships the
+# bundled knowledge base. Anchored with a leading slash to scope to repo root.
+/reference/
+
+# Misc
+*.log
+debug_payload.json
+brainstorm_outputs/

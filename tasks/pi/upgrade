@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-#MISE description="Upgrade pi to the latest npm release and rebuild the image"
+#MISE description="Upgrade little-coder from vendor copy and rebuild"
 set -euo pipefail
 
 PI_IMAGE="pi-less-yolo:latest"
-DOCKERFILE="${MISE_TASK_DIR}/../../Dockerfile"
+VENDOR_DIR="${MISE_TASK_DIR}/../../vendor/little-coder"
 DOCKER_CMD="${PI_CONTAINER_RUNTIME:-docker}"
 
 "${DOCKER_CMD}" image inspect "${PI_IMAGE}" > /dev/null 2>&1 || {
@@ -11,18 +11,21 @@ DOCKER_CMD="${PI_CONTAINER_RUNTIME:-docker}"
   exit 1
 }
 
-CURRENT=$(perl -ne 'print $1 if /pi-coding-agent@([\d.]+)/' "${DOCKERFILE}")
-LATEST=$("${DOCKER_CMD}" run --rm --entrypoint npm "${PI_IMAGE}" view @earendil-works/pi-coding-agent version)
-
-if [[ "${CURRENT}" == "${LATEST}" ]]; then
-  echo "Already at latest pi version: ${CURRENT}"
-  exit 0
+if [[ ! -d "${VENDOR_DIR}" ]] || [[ ! -f "${VENDOR_DIR}/package.json" ]]; then
+  echo "error: vendor/little-coder/ not found" >&2
+  exit 1
 fi
 
-echo "Upgrading pi: ${CURRENT} → ${LATEST}"
+CURRENT=$(node -e "console.log(require('${VENDOR_DIR}/package.json').version)" 2>/dev/null || echo "unknown")
+LATEST=$("${DOCKER_CMD}" run --rm --entrypoint npm "${PI_IMAGE}" view little-coder version 2>/dev/null || echo "unknown")
 
-# perl -pi -e is cross-platform (macOS and Linux); avoids sed -i / sed -i ''
-# incompatibility.
-perl -pi -e "s/pi-coding-agent\@[\d.]+/pi-coding-agent\@${LATEST}/" "${DOCKERFILE}"
+echo "Vendor version: ${CURRENT}"
+echo "Latest on npm:  ${LATEST}"
+echo ""
+echo "To upgrade, update your local fork:"
+echo "  cd vendor/little-coder && git pull"
+echo "Then rebuild: mise run pi:build"
+echo ""
 
+# Always rebuild since we're using a local copy
 mise run pi:build

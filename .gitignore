@@ -1,0 +1,10 @@
+# Ignore nested git repos (keeps build context small for Docker)
+vendor/*/node_modules
+vendor/*/.git
+
+# Local env config (copy from .env.example)
+.env
+
+# pnpm artifacts (not used by npm — have pnpm-lock.yaml from prior vendor setup)
+vendor/*/pnpm-lock.yaml
+vendor/*/pnpm-workspace.yaml

@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+"""Aider Polyglot runner for little-coder.
+
+Drives `pi --mode rpc` per exercise via benchmarks/rpc_client.py::PiRpc.
+Per-language transforms (xit-strip, @Disabled-strip, cpp CMakeLists
+named dirs, cargo --include-ignored, EXERCISM_RUN_ALL_TESTS) are copied
+verbatim from little-coder's original aider_polyglot.py — the only real
+change is that the agent call site uses PiRpc instead of agent.run().
+
+Usage:
+    python benchmarks/aider_polyglot.py              # full run, default model
+    python benchmarks/aider_polyglot.py --language python
+    python benchmarks/aider_polyglot.py --exercise hello-world --language python
+    python benchmarks/aider_polyglot.py --model llamacpp/qwen3.5-9b
+"""
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from rpc_client import PiRpc, PromptResult  # noqa: E402
+
+BENCHMARK_ROOT = Path.home() / "Documents" / "polyglot-benchmark"
+REPO_ROOT = Path(__file__).parent.parent
+RESULTS_FILE = Path(__file__).parent / "results_full_polyglot.json"
+LOG_ROOT = Path(__file__).parent / "full_polyglot_logs"
+DEFAULT_MODEL = "llamacpp/qwen3.6-35b-a3b"
+
+# Allowed tools for Polyglot — the core filesystem + bash toolbox. Ports
+# the whitepaper's Polyglot configuration (no TB-style ShellSession, no
+# GAIA-style Browser/Evidence).
+ALLOWED_TOOLS = [
+    "read", "Read",
+    "write", "Write",
+    "edit", "Edit",
+    "bash", "Bash",
+    "glob", "Glob",
+    "grep", "Grep",
+    "webfetch", "WebFetch",
+]
+
+
+# ── Per-language descriptors ──────────────────────────────────────────────
+#
+# Keep the structure identical to little-coder's aider_polyglot.py so the
+# transforms (smoke-tested over the full 225-exercise run that produced the
+# 78.67% headline) carry over unchanged.
+
+def _copy_exercise(src: Path, dst: Path):
+    """Copy exercise tree, excluding .meta/ (solutions live there)."""
+    def _ignore(_dir, names):
+        return [".meta"] if ".meta" in names else []
+    shutil.copytree(src, dst, ignore=_ignore)
+
+
+def _prepare_python(src: Path, work: Path):
+    _copy_exercise(src, work)
+    stubs = list(work.glob("*.py"))
+    stubs = [p for p in stubs if not p.name.endswith("_test.py")]
+    tests = list(work.glob("*_test.py"))
+    return stubs, tests
+
+
+def _run_python(work: Path, timeout: int):
+    try:
+        r = subprocess.run(
+            ["python3", "-m", "pytest", "-x", "-q"],
+            cwd=work, capture_output=True, text=True, timeout=timeout,
+        )
+        return r.returncode == 0, (r.stdout + r.stderr)
+    except subprocess.TimeoutExpired:
+        return False, f"timed out after {timeout}s"
+
+
+LANG_DESCRIPTORS = {
+    "python": {
+        "practice_dir": BENCHMARK_ROOT / "python" / "exercises" / "practice",
+        "prepare": _prepare_python,
+        "run_tests": _run_python,
+        "syntax_hint": "Use Python 3. Run tests with `python -m pytest -x -q`.",
+        "timeout_s": 90,
+    },
+    # go/rust/cpp/javascript/java descriptors omitted from this scaffold;
+    # copy them verbatim from the Python repo's aider_polyglot.py when
+    # running the full benchmark. Stub:
+    # "rust":      {..., "prepare": _prepare_rust, ...},
+    # "go":        {..., "prepare": _prepare_go, ...},
+    # "cpp":       {..., "prepare": _prepare_cpp, ...},
+    # "javascript": {..., "prepare": _prepare_js, ...},
+    # "java":      {..., "prepare": _prepare_java, ...},
+}
+
+
+# ── Result file helpers ────────────────────────────────────────────────────
+
+def _load_results() -> dict:
+    if RESULTS_FILE.exists():
+        try:
+            return json.loads(RESULTS_FILE.read_text())
+        except Exception:
+            pass
+    return {"exercises": {}, "meta": {}}
+
+
+def _save_results(data: dict):
+    tmp = RESULTS_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2))
+    tmp.replace(RESULTS_FILE)
+
+
+# ── Core loop ──────────────────────────────────────────────────────────────
+
+def _build_prompt(exercise_name: str, stub_paths, test_paths, syntax_hint: str) -> str:
+    stubs_list = "\n".join(f"  - {p}" for p in stub_paths)
+    tests_list = "\n".join(f"  - {p}" for p in test_paths)
+    return (
+        f"Implement the Exercism exercise `{exercise_name}`.\n\n"
+        f"Stub file(s) to implement:\n{stubs_list}\n\n"
+        f"Test file(s) (for reference only — DO NOT edit):\n{tests_list}\n\n"
+        f"{syntax_hint}\n\n"
+        "Read the stubs + any `.docs/instructions.md` in the workspace, "
+        "then implement the solution. When you believe the code is correct, "
+        "stop calling tools."
+    )
+
+
+def _run_exercise(
+    lang: str,
+    ex_name: str,
+    model: str,
+    verbose: bool,
+    retry: bool,
+):
+    desc = LANG_DESCRIPTORS.get(lang)
+    if desc is None:
+        return {"status": "skipped", "reason": f"no descriptor for language {lang}"}
+
+    src = desc["practice_dir"] / ex_name
+    if not src.exists():
+        return {"status": "error", "reason": f"exercise not found at {src}"}
+
+    log_dir = LOG_ROOT / lang / ex_name
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / ex_name
+        stubs, tests = desc["prepare"](src, work)
+        prompt = _build_prompt(ex_name, stubs, tests, desc["syntax_hint"])
+
+        t0 = time.time()
+        with PiRpc(model=model, cwd=str(work), allowed_tools=ALLOWED_TOOLS,
+                   session_id=f"poly-{lang}-{ex_name}",
+                   env={"LITTLE_CODER_PERMISSION_MODE": "accept-all"}) as rpc:
+            r1 = rpc.prompt_and_collect(prompt, timeout=900)
+            passed, out = desc["run_tests"](work, desc["timeout_s"])
+            attempt = "pass_1" if passed else None
+
+            if not passed and retry:
+                retry_prompt = (
+                    "The tests failed. Output:\n\n```\n"
+                    + out[-4000:]
+                    + "\n```\n\nFix the implementation and try again."
+                )
+                r2 = rpc.prompt_and_collect(retry_prompt, timeout=900)
+                passed, out = desc["run_tests"](work, desc["timeout_s"])
+                if passed:
+                    attempt = "pass_2"
+
+        elapsed = time.time() - t0
+        (log_dir / "final_output.txt").write_text(out)
+        if verbose:
+            print(f"[{lang}/{ex_name}] {'PASS' if passed else 'FAIL'} in {elapsed:.1f}s on {attempt or 'fail'}")
+
+        return {
+            "status": attempt or "fail",
+            "elapsed_s": round(elapsed, 2),
+            "turn_count": (r1.turn_count + (r2.turn_count if not attempt == "pass_1" and retry else 0)) if attempt else r1.turn_count,
+        }
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--language", default="python")
+    ap.add_argument("--exercise", default=None, help="Run a single exercise")
+    ap.add_argument("--exercises", type=int, default=0, help="Run first N exercises (0 = all)")
+    ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--no-retry", action="store_true")
+    ap.add_argument("--verbose", action="store_true")
+    args = ap.parse_args()
+
+    results = _load_results() if args.resume else {"exercises": {}, "meta": {}}
+    results["meta"].update({
+        "model": args.model,
+        "started_at": datetime.datetime.now().isoformat(),
+    })
+
+    desc = LANG_DESCRIPTORS.get(args.language)
+    if desc is None:
+        sys.exit(f"No descriptor for language '{args.language}'. Supported: {list(LANG_DESCRIPTORS)}")
+
+    practice = desc["practice_dir"]
+    if args.exercise:
+        names = [args.exercise]
+    else:
+        names = sorted(p.name for p in practice.iterdir() if p.is_dir())
+        if args.exercises:
+            names = names[:args.exercises]
+
+    for name in names:
+        key = f"{args.language}/{name}"
+        if args.resume and results["exercises"].get(key, {}).get("status") in ("pass_1", "pass_2"):
+            continue
+        r = _run_exercise(
+            args.language, name, args.model,
+            verbose=args.verbose,
+            retry=not args.no_retry,
+        )
+        results["exercises"][key] = r
+        _save_results(results)
+
+    print(json.dumps({
+        k: v["status"]
+        for k, v in results["exercises"].items()
+    }, indent=2))
+
+
+if __name__ == "__main__":
+    main()

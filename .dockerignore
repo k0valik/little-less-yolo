@@ -1,0 +1,11 @@
+# Exclude from Docker build context (keeps it small)
+.git
+.gitignore
+node_modules
+vendor/*/node_modules
+vendor/*/.git
+*.log
+.env
+.env.*
+pi-less-yolo/.mise
+pi-less-yolo/mise-release.asc
