@@ -12,18 +12,37 @@ isolated Docker container. Your host `~/.pi/agent/` is never touched.
 ## One-time Setup
 
 ```bash
-# 1. Trust the project's mise config
-cd /mnt/e/small-pi/pi-less-yolo
+# 1. Clone the repo (needed for tasks/mise config — the pi commands live here)
+git clone https://github.com/k0valik/little-less-yolo.git
+cd little-less-yolo
+
+# 2. Trust the project's mise config
 mise trust
 
-# 2. Register tasks globally (so `mise run pi` works from any directory)
+# 3. Register tasks globally (so `mise run pi` works from any directory)
 mise run install
+```
 
-# 3. Build the Docker image (~2 min)
+### 4. Get the Docker Image — Two Options
+
+**Option A — Pull from GHCR (fast, CI-built):**
+
+```bash
+docker pull ghcr.io/k0valik/little-less-yolo:latest
+docker tag ghcr.io/k0valik/little-less-yolo:latest pi-less-yolo:latest
+```
+
+The image is built by CI on every push to `main`. You don't need the little-coder
+fork locally — it's baked in.
+
+**Option B — Build locally (~2 min, needed if you modify Dockerfile or vendor/):**
+
+```bash
 mise run pi:build            # or: ./build-container.sh
 ```
 
-> **Or just jump to step 4** — `mise run pi` auto-builds if the image is missing.
+> If you skip both, `mise run pi` will auto-build from source the first time
+> (Option B, but slower since it's cold).
 
 ## Run
 
@@ -53,6 +72,19 @@ cp .env.example .env
 ```
 
 See `.env.example` for the full list of ~40 documented variables.
+
+## Do You Need the Repo After Setup?
+
+| What | Needs the repo? | Why |
+|---|---|---|
+| Running `mise run pi` | ✅ Yes | Tasks (`tasks/pi/`), `.env` auto-source, `_docker_flags` |
+| Pulling the image from GHCR | ❌ No | Image is pre-built, just `docker pull` |
+| Editing extensions/skills on the mount | ❌ No | They live in `~/.pi/agent-little-coder/` |
+| Building locally after modifying Dockerfile | ✅ Yes | `./build-container.sh` or `mise run pi:build` |
+| Updating the vendored fork | ✅ Yes | `cd vendor/little-coder && git pull` then rebuild |
+
+**Bottom line:** Keep the clone — it's small (~50 MB with vendor/, excludes
+node_modules via `.gitignore`). The tasks and config are read from it at runtime.
 
 ## Everything Lives on the Mount — Edit from Windows or WSL2
 
@@ -101,6 +133,7 @@ mise run pi:build
 | `mise run pi:build` | Build / rebuild the Docker image |
 | `mise run pi:upgrade` | Pull fork + rebuild |
 | `mise run pi:pi-acp` | ACP stdio connection for IDE integration |
+| `mise run lint` | Run hadolint + shellcheck locally (CI gate) |
 
 ## Host Isolation Guarantee
 
