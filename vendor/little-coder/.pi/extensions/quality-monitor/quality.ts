@@ -33,7 +33,7 @@ export function assessResponse(
     for (const tc of toolCalls) {
       for (const prev of recentToolCalls) {
         if (tc.name === prev.name &&
-            JSON.stringify(tc.input) === JSON.stringify(prev.input)) {
+            JSON.stringify(tc.input, Object.keys(tc.input).sort()) === JSON.stringify(prev.input, Object.keys(prev.input).sort())) {
           return { ok: false, reason: "repeated_tool_call" };
         }
       }

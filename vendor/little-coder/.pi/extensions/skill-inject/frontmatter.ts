@@ -32,7 +32,7 @@ export function parseSkillFile(text: string): ParsedSkill | null {
     } else if (val === "true" || val === "false") {
       fm[key] = val === "true";
     } else {
-      fm[key] = val;
+      fm[key] = val.replace(/^["']|["']$/g, "");
     }
   }
   return { frontmatter: fm, body };

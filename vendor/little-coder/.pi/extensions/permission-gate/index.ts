@@ -71,7 +71,7 @@ export default function (pi: ExtensionAPI) {
           return { block: true, reason: "manual permission mode: bash command not pre-approved" };
         }
         // auto: block when not whitelisted
-        return { block: true, reason: `bash whitelist: "${cmd.split(/\s+/)[0]}" is not in SAFE_PREFIXES` };
+        return { block: true, reason: `bash whitelist: "${cmd.trim().split(/\s+/)[0]}" is not in SAFE_PREFIXES` };
       }
     }
   });
