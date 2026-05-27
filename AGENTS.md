@@ -18,7 +18,7 @@ Dockerfile, and a CI smoke test.
 | `tasks/pi/build` | `mise run pi:build` — builds the Docker image |
 | `tasks/pi/shell` | `mise run pi:shell` — opens bash in the container with identical mounts |
 | `tasks/pi/upgrade` | `mise run pi:upgrade` — bumps the `npm install -g` line in `Dockerfile` and rebuilds |
-| `tasks/pi/health` | `mise run pi:health` — checks mise version, Docker, image, task files, `~/.pi/agent`, and tmux |
+| `tasks/pi/health` | `mise run pi:health` — checks mise version, Docker, image, task files, `~/.pi/agent-little-coder`, and tmux |
 | `.mise/tasks/ci` | `mise run ci` — lint → build → smoke test (local equivalent of CI) |
 | `.mise/tasks/install` | Writes `~/.config/mise/conf.d/pi-less-yolo.toml` to register tasks globally |
 | `.mise/tasks/uninstall` | Removes the global config file |

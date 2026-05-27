@@ -20,7 +20,7 @@ version_gte() {
   printf '%s\n%s' "$2" "$1" | sort -C -V
 }
 
-echo "pi-less-yolo health check"
+echo "little-less-yolo health check"
 echo "========================="
 echo ""
 
@@ -58,10 +58,10 @@ else
 fi
 
 # --- image ------------------------------------------------------------------
-if "${DOCKER_CMD}" image inspect "pi-less-yolo:latest" > /dev/null 2>&1; then
-  pass "image pi-less-yolo:latest exists"
+if "${DOCKER_CMD}" image inspect "little-less-yolo:latest" > /dev/null 2>&1; then
+  pass "image little-less-yolo:latest exists"
 else
-  warn "image pi-less-yolo:latest not found — run: mise run pi:build"
+  warn "image little-less-yolo:latest not found — run: mise run pi:build"
 fi
 
 # --- conf.d entry -----------------------------------------------------------
@@ -85,19 +85,25 @@ for NAME in _default build shell upgrade health; do
   fi
 done
 
-# --- ~/.pi/agent ------------------------------------------------------------
-if [[ -d "${HOME}/.pi/agent" ]]; then
-  _agent_owner=$(stat -c '%u' "${HOME}/.pi/agent" 2>/dev/null || stat -f '%u' "${HOME}/.pi/agent" 2>/dev/null)
+# --- little-coder version ---------------------------------------------------
+LC_VER=$(docker run --rm --entrypoint sh "${PI_IMAGE}" -c 'little-coder --version 2>/dev/null || node -e "try{console.log(require(\"little-coder/package.json\").version)}catch(e){console.log(\"unknown\")}"' 2>/dev/null || echo "unknown")
+if [[ "${LC_VER}" != "unknown" && -n "${LC_VER}" ]]; then
+  pass "little-coder ${LC_VER} installed in image"
+else
+  warn "could not determine little-coder version in image — is it installed?"
+fi
+
+# --- ~/.pi/agent-little-coder -----------------------------------------------
+LC_AGENT_DIR="${HOME}/.pi/agent-little-coder"
+if [[ -d "${LC_AGENT_DIR}" ]]; then
+  _agent_owner=$(stat -c '%u' "${LC_AGENT_DIR}" 2>/dev/null || stat -f '%u' "${LC_AGENT_DIR}" 2>/dev/null)
   if [[ "${_agent_owner}" == "$(id -u)" ]]; then
-    # shellcheck disable=SC2088
-    pass "~/.pi/agent exists and is owned by current user"
+    pass "${LC_AGENT_DIR} exists and is owned by current user (seeded from bundled .pi/)"
   else
-    # shellcheck disable=SC2088
-    fail "~/.pi/agent is owned by UID ${_agent_owner}, not $(id -u) — run: sudo chown -R \"\$(id -u):\$(id -g)\" ~/.pi/agent"
+    fail "${LC_AGENT_DIR} is owned by UID ${_agent_owner}, not $(id -u)"
   fi
 else
-  # shellcheck disable=SC2088
-  warn "~/.pi/agent does not exist — it will be created on first run"
+  warn "${LC_AGENT_DIR} does not exist — it will be created and seeded on first run"
 fi
 
 # --- tmux passthrough -------------------------------------------------------
@@ -136,7 +142,7 @@ else
 fi
 
 # --- local model servers ---------------------------------------------------
-MODELS_JSON="${HOME}/.pi/agent/models.json"
+MODELS_JSON="${LC_AGENT_DIR}/models.json"
 _has_local_urls=0
 [[ -f "${MODELS_JSON}" ]] && grep -qE "localhost|127\.0\.0\.1" "${MODELS_JSON}" && _has_local_urls=1
 if [[ -n "${PI_LOCAL_MODELS:-}" ]]; then

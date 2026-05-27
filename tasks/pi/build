@@ -18,7 +18,7 @@ BUILD_FLAGS=()
 
 "${DOCKER_CMD}" build "${BUILD_FLAGS[@]}" \
   -f "${REPO_ROOT}/Dockerfile" \
-  -t "pi-less-yolo:latest" \
+  -t "little-less-yolo:latest" \
   "${REPO_ROOT}"
 
-echo "Image 'pi-less-yolo:latest' built successfully."
+echo "Image 'little-less-yolo:latest' built successfully."
