@@ -20,7 +20,7 @@ version_gte() {
   printf '%s\n%s' "$2" "$1" | sort -C -V
 }
 
-echo "little-less-yolo health check"
+echo "pi-less-yolo health check"
 echo "========================="
 echo ""
 
@@ -58,10 +58,10 @@ else
 fi
 
 # --- image ------------------------------------------------------------------
-if "${DOCKER_CMD}" image inspect "little-less-yolo:latest" > /dev/null 2>&1; then
-  pass "image little-less-yolo:latest exists"
+if "${DOCKER_CMD}" image inspect "pi-less-yolo:latest" > /dev/null 2>&1; then
+  pass "image pi-less-yolo:latest exists"
 else
-  warn "image little-less-yolo:latest not found — run: mise run pi:build"
+  warn "image pi-less-yolo:latest not found — run: mise run pi:build"
 fi
 
 # --- conf.d entry -----------------------------------------------------------
