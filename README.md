@@ -3,9 +3,9 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![pi version](https://img.shields.io/badge/pi--coding--agent-0.74.0-blueviolet)](https://github.com/earendil-works/pi/tree/main/packages/coding-agent)
 [![Base Image](https://img.shields.io/badge/base%20image-chainguard%2Fnode-F4835E?logo=docker)](https://images.chainguard.dev/directory/image/node/overview)
-[![Dependabot](https://img.shields.io/badge/Dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/cjermain/pi-less-yolo/blob/main/.github/dependabot.yml)
+[![Dependabot](https://img.shields.io/badge/Dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/k0valik/little-less-yolo/blob/main/.github/dependabot.yml)
 [![mise](https://mise-versions.jdx.dev/badge.svg)](https://mise.jdx.dev)
-[![CI](https://img.shields.io/github/actions/workflow/status/cjermain/pi-less-yolo/ci.yml?style=flat&label=CI)](https://github.com/cjermain/pi-less-yolo/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/k0valik/little-less-yolo/ci.yml?style=flat&label=CI)](https://github.com/k0valik/little-less-yolo/actions/workflows/ci.yml)
 
 > Run [pi-coding-agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent) (a multi-provider AI coding agent supporting Claude, GPT, Gemini, and [many more](https://github.com/earendil-works/pi/tree/main/packages/coding-agent#providers--models)) inside an isolated Docker container — limiting the blast radius of agent-driven changes to your mounted working directory.
 
@@ -37,16 +37,20 @@ If you use [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Aider,
 ## Install
 
 ```bash
-git clone https://github.com/cjermain/pi-less-yolo.git
-cd pi-less-yolo
+git clone https://github.com/k0valik/little-less-yolo.git
+cd little-less-yolo
 mise run install
 ```
 
 `install` writes a single file — `~/.config/mise/conf.d/pi-less-yolo.toml` — that points mise at the `tasks/` directory in the cloned repo. The five pi tasks become available globally from any directory. The repo must stay at the cloned path; if you move it, re-run `mise run install`.
 
-Then build the Docker image (one-time, ~2 minutes):
+Then pull or build the Docker image:
 
 ```bash
+# Option A: pull the pre-built image from GHCR (fast, ~200 MB)
+docker pull ghcr.io/k0valik/little-less-yolo:latest && docker tag ghcr.io/k0valik/little-less-yolo:latest pi-less-yolo:latest
+
+# Option B: build locally (one-time, ~2 minutes)
 mise run pi:build
 ```
 
