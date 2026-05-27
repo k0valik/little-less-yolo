@@ -29,7 +29,8 @@ ARG MISE_DATA_DIR=/usr/local/share/mise
 # GITHUB_TOKEN is forwarded from CI via BuildKit secret so mise
 # doesn't hit GitHub API rate limits during the install step.
 RUN --mount=type=secret,id=github_token \
-    export GITHUB_TOKEN=$(cat /run/secrets/github_token 2>/dev/null || echo "") \
+    GITHUB_TOKEN="$(cat /run/secrets/github_token 2>/dev/null)" \
+    && export GITHUB_TOKEN \
     && mise install uv@0.11.13 \
     && ln -s "$(mise exec uv@0.11.13 -- which uv)" /usr/local/bin/uv \
     && ln -s "$(mise exec uv@0.11.13 -- which uvx)" /usr/local/bin/uvx
