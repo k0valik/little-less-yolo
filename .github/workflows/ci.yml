@@ -64,12 +64,10 @@ jobs:
       - name: Save image artifact (for downstream test jobs)
         if: github.event_name == 'pull_request'
         run: |
-          # Write tags to a file to handle multi-line output safely
-          cat <<'EOTAGS' > /tmp/tags.txt
-${{ steps.meta.outputs.tags }}
-EOTAGS
-          FIRST=$(head -1 /tmp/tags.txt)
-          docker save "${FIRST}" -o image.tar
+          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${GITHUB_SHA:0:7}"
+          docker save "${IMG}" -o image.tar
+        env:
+          GITHUB_SHA: ${{ github.sha }}
 
       - name: Upload image artifact
         if: github.event_name == 'pull_request'
