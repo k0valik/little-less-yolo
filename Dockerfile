@@ -5,7 +5,9 @@ USER root
 RUN apk add --no-cache \
         curl \
         ca-certificates \
+        ffmpeg \
         git \
+        ninja-build \
         openssh-client \
         tmux
 
