@@ -47,17 +47,23 @@ RUN uv python install 3.14.4 \
 # this repo — just git clone/pull your fork there and rebuild.
 COPY ./vendor/little-coder/ /little-coder-source/
 # hadolint ignore=DL3016
-RUN npm install -g /little-coder-source
+RUN pnpm install -g /little-coder-source
+
+# Pre-install pi's hex-edit extension during build (not at runtime) so pnpm
+# runs the build scripts for @google/genai and protobufjs. Without this,
+# pnpm v10+ blocks them by default and the extension silently fails.
+RUN mkdir -p "$PNPM_HOME/global/5" \
+    && echo '{"pnpm":{"onlyBuiltDependencies":["@google/genai","protobufjs"]}}' > "$PNPM_HOME/global/5/package.json" \
+    && pnpm install -g @vtstech/pi-hex-edit
 
 # Install Playwright + Chromium for the browser/ extension.
 # little-coder's browser tools gracefully degrade if Playwright is absent,
-# but for full functionality we install it. Using the system npm (not npx)
-# so the binaries land in /pi-agent/npm-global/bin (set by .npmrc prefix).
+# but for full functionality we install it.
 # Note: --with-deps may fail on Chainguard/Wolfi (not a recognized distro).
 # If it does, the browser tools still register but return a clear error.
-RUN npm install -g playwright@1.60.0 \
-    && npx playwright install --with-deps chromium || \
-       npx playwright install chromium || \
+RUN pnpm install -g playwright@1.60.0 \
+    && pnpm dlx playwright install --with-deps chromium || \
+       pnpm dlx playwright install chromium || \
        echo "warning: Chromium install skipped — browser tools will degrade gracefully"
 
 # /pi-agent: the PI_CODING_AGENT_DIR. On first run the entrypoint seeds it
@@ -73,6 +79,7 @@ COPY ./vendor/little-coder/models.json /pi-agent/
 # here can shadow any command; no privilege escalation (--cap-drop=ALL,
 # --no-new-privileges), but review ~/.pi/agent/npm-global/bin/ after installs.
 ENV PATH="/pi-agent/npm-global/bin:${PATH}"
+ENV PNPM_HOME=/pi-agent/npm-global/bin
 
 # /home/piuser: world-writable (1777) so any runtime UID can write here.
 # /home/piuser/.ssh: root-owned 755; SSH accepts it and the runtime user can
